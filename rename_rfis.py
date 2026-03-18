@@ -46,7 +46,6 @@ def extract_hyperlinks(pdf_path: str) -> list:
     """
     Return all hyperlinks embedded in the PDF as a list of dicts:
         [{"uri": "https://...", "page": 0}, ...]
-    Uses pypdf's annotation reader.
     """
     links = []
     reader = PdfReader(pdf_path)
@@ -68,17 +67,11 @@ def extract_hyperlinks(pdf_path: str) -> list:
 def find_response_attachment_urls(pdf_path: str) -> list:
     """
     Return URLs of attachments that appear under an Official Response block.
-
-    Strategy:
-      - Extract all hyperlinks from the PDF with their page numbers.
-      - Identify which pages contain "Official Response" text.
-      - Return links found on those pages (skipping mailto/anchor links).
     """
     all_links = extract_hyperlinks(pdf_path)
     if not all_links:
         return []
 
-    # Find which pages contain "Official Response"
     response_pages = set()
     reader = PdfReader(pdf_path)
     for page_num, page in enumerate(reader.pages):
@@ -86,7 +79,6 @@ def find_response_attachment_urls(pdf_path: str) -> list:
         if re.search(r"Official Response", page_text, re.IGNORECASE):
             response_pages.add(page_num)
 
-    # Collect URLs only from those pages
     urls = []
     seen = set()
     for link in all_links:
@@ -105,7 +97,6 @@ def find_response_attachment_urls(pdf_path: str) -> list:
 def download_pdf(url: str, timeout: int = 30):
     """
     Download a file from a URL. Returns raw bytes or None on failure.
-    Handles redirects automatically.
     """
     try:
         headers = {"User-Agent": "Mozilla/5.0 (RFI-Processor/1.0)"}
@@ -132,8 +123,7 @@ def download_pdf(url: str, timeout: int = 30):
 
 def merge_pdfs(base_pdf_path: str, attachment_bytes_list: list, output_path: str) -> bool:
     """
-    Merge the base PDF with one or more attachment PDFs (as bytes) and write
-    the result to output_path. Returns True on success.
+    Merge the base PDF with one or more attachment PDFs and write to output_path.
     """
     try:
         writer = PdfWriter()
@@ -182,10 +172,6 @@ def extract_rfi_info(pdf_path: str) -> dict:
 
         full_text = "\n".join(full_text_pages)
 
-        # ------------------------------------------------------------------
-        # 1. RFI number and subject from bold heading
-        #    Format: "RFI #0-PB-149: Support of Stair 2, ..."
-        # ------------------------------------------------------------------
         heading_match = re.search(
             r"RFI\s+#(0-PB-\d+)\s*:\s*(.+)",
             full_text,
@@ -199,9 +185,6 @@ def extract_rfi_info(pdf_path: str) -> dict:
             result["error"] = "Could not find RFI heading (RFI #0-PB-###: Subject)."
             return result
 
-        # ------------------------------------------------------------------
-        # 2. Find hyperlinks embedded in Official Response pages
-        # ------------------------------------------------------------------
         result["response_attachment_urls"] = find_response_attachment_urls(pdf_path)
 
     except Exception as exc:
@@ -284,8 +267,7 @@ def main():
                         print(f"      OK — {len(data):,} bytes")
 
                 if downloaded:
-                    # Write temp file to the same folder as the PDF to avoid
-                    # cross-device errors when replacing (e.g. /tmp vs /workspaces)
+                    # Write temp file to same folder to avoid cross-device errors
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=".pdf", dir=folder
                     ) as tmp:
