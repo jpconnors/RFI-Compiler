@@ -94,30 +94,49 @@ def find_response_attachment_urls(pdf_path: str) -> list:
     return urls
 
 
-def download_pdf(url: str, timeout: int = 30):
+def download_pdf(url: str, timeout: int = 60):
     """
     Download a file from a URL. Returns raw bytes or None on failure.
+    Streams the download and prints progress.
     """
     try:
         headers = {"User-Agent": "Mozilla/5.0 (RFI-Processor/1.0)"}
-        response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        response = requests.get(url, headers=headers, timeout=timeout,
+                                allow_redirects=True, stream=True)
         response.raise_for_status()
 
         content_type = response.headers.get("Content-Type", "")
+        total = int(response.headers.get("Content-Length", 0))
+
+        chunks = []
+        downloaded = 0
+        for chunk in response.iter_content(chunk_size=65536):
+            if chunk:
+                chunks.append(chunk)
+                downloaded += len(chunk)
+                if total:
+                    pct = downloaded / total * 100
+                    print(f"\r      Downloading... {downloaded:,} / {total:,} bytes ({pct:.0f}%)", end="", flush=True)
+                else:
+                    print(f"\r      Downloading... {downloaded:,} bytes", end="", flush=True)
+
+        print()  # newline after progress
+
+        data = b"".join(chunks)
         is_pdf = (
             "pdf" in content_type
             or "octet-stream" in content_type
-            or response.content[:4] == b"%PDF"
+            or data[:4] == b"%PDF"
         )
 
         if is_pdf:
-            return response.content
+            return data
 
         print(f"      [WARNING] URL did not return a PDF (Content-Type: {content_type}). Skipping.")
         return None
 
     except requests.RequestException as exc:
-        print(f"      [WARNING] Could not download {url}: {exc}")
+        print(f"\n      [WARNING] Could not download: {exc}")
         return None
 
 
